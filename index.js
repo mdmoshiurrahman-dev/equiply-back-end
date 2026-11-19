@@ -32,6 +32,7 @@ app.get("/", (req, res) => {
   res.send({ message: "server is running" });
 });
 
+//! handel equipment submission request data---------
 app.post("/update-user-data", async (req, res) => {
   const header = req.headers.authorization;
   if (!header) {
@@ -42,7 +43,14 @@ app.post("/update-user-data", async (req, res) => {
   if (!isTokenValid) {
     return res.status(401).send({ message: "Unauthorized" });
   }
+
   const userId = isTokenValid.userId;
+
+  const applicantUser = userDataColl.findOne({ _id: new ObjectId(userId) });
+  if (!applicantUser && applicantUser.role !== "none") {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+
   const submittedData = req.body;
   const result = await userDataColl.updateOne(
     { _id: new ObjectId(userId) },
@@ -50,8 +58,15 @@ app.post("/update-user-data", async (req, res) => {
       $set: submittedData,
     },
   );
-  res.send(result)
+  if (result.acknowledged) {
+    res.send(result);
+  } else {
+    res.send({ message: "something went wrong" });
+  }
 });
+//*----------------------------------------------------------------
+
+
 
 app.listen(port, () => {
   console.log("server is running on ", port);
