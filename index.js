@@ -27,35 +27,45 @@ const mongoDBConnection = await connectToMongoDB();
 const database = mongoDBConnection.db("Equiply");
 const sessionCollection = database.collection("session");
 const userDataColl = database.collection("user");
-const equipmentsSubmissionColl = database.collection('equipments')
+const equipmentsSubmissionColl = database.collection("equipments");
+
 app.get("/", (req, res) => {
   res.send({ message: "server is running" });
 });
 
-//! handel equipment submission request data---------
-app.post("/update-user-data", async (req, res) => {
+//! middleware for check user authentication
+const verifyUser = async (req, res, next) => {
   const header = req.headers.authorization;
   if (!header) {
     return res.status(401).send({ message: "Unauthorized" });
   }
   const token = header.split(" ")[1];
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
   const isTokenValid = await sessionCollection.findOne({ token: token });
   if (!isTokenValid) {
     return res.status(401).send({ message: "Unauthorized" });
   }
+  const userId = { _id: new ObjectId(isTokenValid.userId) };
+  const applicantUser = await userDataColl.findOne(userId);
+  if (!applicantUser) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+  req.user = applicantUser;
+  next();
+};
 
-  const userId = isTokenValid.userId;
-
-  const applicantUser = await userDataColl.findOne({
-    _id: new ObjectId(userId),
-  });
-  if (applicantUser.role !== "none") {
+//! handel submission request for to be provider ---------
+app.post("/update-user-data", verifyUser, async (req, res) => {
+  const userData = req.user;
+  if (userData.role !== "none") {
     return res.status(403).send({ message: "Forbidden" });
   }
 
   const submittedData = req.body;
   const result = await userDataColl.updateOne(
-    { _id: new ObjectId(userId) },
+    { _id: new ObjectId(userData._id) },
     {
       $set: submittedData,
     },
@@ -69,30 +79,15 @@ app.post("/update-user-data", async (req, res) => {
 
 //*----------------------------------------------------------------
 
-//! handel renter request data---------
-app.post("/update-renter-data", async (req, res) => {
-  const header = req.headers.authorization;
-  if (!header) {
-    return res.status(401).send({ message: "Unauthorized" });
-  }
-  const token = header.split(" ")[1];
-  if (!token) {
-    return res.status(401).send({ message: "Unauthorized" });
-  }
-  const isTokenValid = await sessionCollection.findOne({ token: token });
-  if (!isTokenValid) {
-    return res.status(401).send({ message: "Unauthorized" });
-  }
-  const validUserId = isTokenValid.userId;
-  const applicantUser = await userDataColl.findOne({
-    _id: new ObjectId(validUserId),
-  });
-  if (applicantUser.role !== "none") {
+//! handel to be renter request data---------
+app.post("/update-renter-data", verifyUser, async (req, res) => {
+  const userData = req.user;
+  if (userData.role !== "none") {
     return res.status(403).send({ message: "Forbidden" });
   }
   const submittedData = req.body;
   const result = await userDataColl.updateOne(
-    { _id: new ObjectId(validUserId) },
+    { _id: new ObjectId(userData._id) },
     {
       $set: submittedData,
     },
@@ -105,29 +100,12 @@ app.post("/update-renter-data", async (req, res) => {
 });
 
 //! get all applicant data
-app.get("/get-all-applicant-data", async (req, res) => {
-  // validation
-  const header = req.headers.authorization;
-  if (!header) {
-    return res.status(401).send({ message: "Unauthorized" });
-  }
-  const token = header.split(" ")[1];
-  if (!token) {
-    return res.status(401).send({ message: "Unauthorized" });
-  }
-  const isTokenValid = await sessionCollection.findOne({ token: token });
-  if (!isTokenValid) {
-    return res.status(401).send({ message: "Unauthorized" });
-  }
-  const validUserId = isTokenValid.userId;
-  const applicantUser = await userDataColl.findOne({
-    _id: new ObjectId(validUserId),
-  });
-  if (applicantUser.role !== "admin") {
+app.get("/get-all-applicant-data", verifyUser, async (req, res) => {
+  const userData = req.user;
+
+  if (userData.role !== "admin") {
     return res.status(403).send({ message: "Forbidden" });
   }
-  //-------------
-  //logic
   const result = await userDataColl.find({ role: "pending" }).toArray();
   if (result) {
     res.send(result);
@@ -136,34 +114,21 @@ app.get("/get-all-applicant-data", async (req, res) => {
   }
 });
 
-
 //! application delete/approve request handler
- 
+
 const type = ["provider", "dismissRequest"];
-app.patch("/set-user-role/:action", async (req, res) => {
+app.patch("/set-user-role/:action", verifyUser, async (req, res) => {
   const applicantId = req.body.applicantId;
   const actionType = req.params.action;
-  const header = req.headers.authorization;
+  const userData = req.user;
   if (!type.includes(actionType)) {
     return res.status(400).send({ message: "Bad request" });
   }
-  if (!applicantId || !actionType || !header) {
+  if (!applicantId || !actionType || !userData) {
     return res.status(400).send({ message: "Bad request" });
   }
-  const token = header.split(" ")[1];
-  if (!token) {
-    return res.status(401).send({ message: "Unauthorized" });
-  }
-  const isTokenValid = await sessionCollection.findOne({ token: token });
-  if (!isTokenValid) {
-    return res.status(401).send({ message: "Unauthorized" });
-  }
-  const requesterId = { _id: new ObjectId(isTokenValid.userId) };
-  const apiRequester = await userDataColl.findOne(requesterId);
-  if (!apiRequester) {
-    return res.status(401).send({ message: "Unauthorized" });
-  }
-  if (apiRequester.role !== "admin") {
+
+  if (userData.role !== "admin") {
     return res.status(403).send({ message: "Forbidden" });
   }
   const updateApplicant = await userDataColl.updateOne(
@@ -176,6 +141,26 @@ app.patch("/set-user-role/:action", async (req, res) => {
   );
   if (updateApplicant.acknowledged) {
     res.send({ status: true, message: "Action is processed" });
+  } else {
+    res.send({ status: false, message: "something went wrong" });
+  }
+});
+
+//! equepment application handel
+app.post("/equipment-application", verifyUser, async (req, res) => {
+  const submittedData = req.body;
+  const userData = req.user;
+  if (userData.role !== "provider") {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  const payload = {
+    ...submittedData,
+    status: "pending",
+  };
+
+  const result = await equipmentsSubmissionColl.insertOne(payload);
+  if (result) {
+    res.send(result);
   } else {
     res.send({ status: false, message: "something went wrong" });
   }
