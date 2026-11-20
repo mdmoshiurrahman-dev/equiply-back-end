@@ -27,7 +27,7 @@ const mongoDBConnection = await connectToMongoDB();
 const database = mongoDBConnection.db("Equiply");
 const sessionCollection = database.collection("session");
 const userDataColl = database.collection("user");
-
+const equipmentsSubmissionColl = database.collection('equipments')
 app.get("/", (req, res) => {
   res.send({ message: "server is running" });
 });
@@ -137,7 +137,49 @@ app.get("/get-all-applicant-data", async (req, res) => {
 });
 
 
-
+//! application delete/approve request handler
+ 
+const type = ["provider", "dismissRequest"];
+app.patch("/set-user-role/:action", async (req, res) => {
+  const applicantId = req.body.applicantId;
+  const actionType = req.params.action;
+  const header = req.headers.authorization;
+  if (!type.includes(actionType)) {
+    return res.status(400).send({ message: "Bad request" });
+  }
+  if (!applicantId || !actionType || !header) {
+    return res.status(400).send({ message: "Bad request" });
+  }
+  const token = header.split(" ")[1];
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+  const isTokenValid = await sessionCollection.findOne({ token: token });
+  if (!isTokenValid) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+  const requesterId = { _id: new ObjectId(isTokenValid.userId) };
+  const apiRequester = await userDataColl.findOne(requesterId);
+  if (!apiRequester) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+  if (apiRequester.role !== "admin") {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  const updateApplicant = await userDataColl.updateOne(
+    { _id: new ObjectId(applicantId) },
+    {
+      $set: {
+        role: actionType,
+      },
+    },
+  );
+  if (updateApplicant.acknowledged) {
+    res.send({ status: true, message: "Action is processed" });
+  } else {
+    res.send({ status: false, message: "something went wrong" });
+  }
+});
 
 app.listen(port, () => {
   console.log("server is running on ", port);
