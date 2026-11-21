@@ -267,8 +267,25 @@ app.get("/get-user-data/", verifyUser, async (req, res) => {
     tel_no: userData.tel_no,
     user_image: userData.user_image,
   };
-  res.send(userDataFiltered)
+  res.send(userDataFiltered);
 });
+
+//! access all equipment list with filter (admin)
+
+app.get("/all-equipment-application", verifyUser, async (req, res) => {
+  const userData = req.user;
+  if (userData.role !== "admin") {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  const result = await equipmentsSubmissionColl.find().toArray();
+  if (result) {
+    res.send(result);
+  } else {
+    res.send({ status: false, message: "No data found" });
+  }
+});
+
+
 
 app.listen(port, () => {
   console.log("server is running on ", port);
