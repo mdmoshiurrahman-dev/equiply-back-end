@@ -156,9 +156,28 @@ app.post("/equipment-application", verifyUser, async (req, res) => {
   const payload = {
     ...submittedData,
     status: "pending",
+    creatorId: userData._id,
   };
 
   const result = await equipmentsSubmissionColl.insertOne(payload);
+  if (result) {
+    res.send(result);
+  } else {
+    res.send({ status: false, message: "something went wrong" });
+  }
+});
+
+//! show equepment application lists created by owner
+app.get("/equipment-application/list", verifyUser, async (req,res) => {
+  const userData = req.user;
+  if (userData.role !== "provider") {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  const result = await equipmentsSubmissionColl
+    .find({
+      creatorId: userData._id,
+    })
+    .toArray();
   if (result) {
     res.send(result);
   } else {
