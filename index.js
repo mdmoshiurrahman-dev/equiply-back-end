@@ -204,7 +204,71 @@ app.get("/equipment-application/details/:id", verifyUser, async (req, res) => {
   res.send(equepmentData);
 });
 
-//! update 
+//! update equepment application
+const allowedRole = ["provider", "admin"];
+app.put("/equipment-application/update/:id", verifyUser, async (req, res) => {
+  const equepmentId = req.params.id;
+  const userData = req.user;
+  const updatedData = req.body;
+  if (!equepmentId || !userData || !updatedData) {
+    return res.status(400).send({ message: "Bad request" });
+  }
+  if (!allowedRole.includes(userData.role)) {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  if (userData.role === "admin") {
+    const isReallyAdmin = await userDataColl.findOne({
+      _id: new ObjectId(userData._id),
+    });
+    if (isReallyAdmin.role !== "admin") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+    //do your work
+  }
+  const equepmentData = await equipmentsSubmissionColl.findOne({
+    _id: new ObjectId(equepmentId),
+  });
+  if (!equepmentData) {
+    res.send({ status: false, message: "No data found" });
+  }
+
+  if (!equepmentData.creatorId.equals(userData._id)) {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  const result = await equipmentsSubmissionColl.replaceOne(
+    { _id: equepmentData._id },
+    updatedData,
+  );
+  console.log(result);
+});
+
+//! get all equepment details (only auth user can see it) ----------------
+
+app.get("/equipment-details/:id", verifyUser, async (req, res) => {
+  const equipmentId = req.params.id;
+  const result = await equipmentsSubmissionColl.findOne({
+    _id: new ObjectId(equipmentId),
+  });
+  if (result) {
+    res.send(result);
+  } else {
+    res.send({ status: false, message: "No data found" });
+  }
+});
+
+//! get all user data for verified users
+app.get("/get-user-data/", verifyUser, async (req, res) => {
+  const userData = req.user;
+  const userDataFiltered = {
+    name: userData.name,
+    email: userData.email,
+    account_type: userData.account_type,
+    business_address: userData.business_address,
+    tel_no: userData.tel_no,
+    user_image: userData.user_image,
+  };
+  res.send(userDataFiltered)
+});
 
 app.listen(port, () => {
   console.log("server is running on ", port);
