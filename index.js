@@ -285,7 +285,22 @@ app.get("/all-equipment-application", verifyUser, async (req, res) => {
   }
 });
 
-
+//! delete rental equipment data (admin)
+app.delete("/delete/equipment/:id", verifyUser, async (req, res) => {
+  const deleteRequestItemId = req.params.id;
+  const apiRequester = req.user;
+  if (apiRequester.role !== "admin") {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  const result = await equipmentsSubmissionColl.deleteOne({
+    _id: new ObjectId(deleteRequestItemId),
+  });
+  if (result.acknowledged) {
+    res.send(result);
+  } else {
+    res.send({ status: false, message: "something went wrong" });
+  }
+});
 
 app.listen(port, () => {
   console.log("server is running on ", port);
