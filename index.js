@@ -168,7 +168,7 @@ app.post("/equipment-application", verifyUser, async (req, res) => {
 });
 
 //! show equepment application lists created by owner
-app.get("/equipment-application/list", verifyUser, async (req,res) => {
+app.get("/equipment-application/list", verifyUser, async (req, res) => {
   const userData = req.user;
   if (userData.role !== "provider") {
     return res.status(403).send({ message: "Forbidden" });
@@ -184,6 +184,27 @@ app.get("/equipment-application/list", verifyUser, async (req,res) => {
     res.send({ status: false, message: "something went wrong" });
   }
 });
+
+//! get equepment details for provider
+app.get("/equipment-application/details/:id", verifyUser, async (req, res) => {
+  const equepmentId = req.params.id;
+  const userData = req.user;
+  if (userData.role !== "provider") {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  const equepmentData = await equipmentsSubmissionColl.findOne({
+    _id: new ObjectId(equepmentId),
+  });
+  if (!equepmentData) {
+    res.send({ status: false, message: "No data found" });
+  }
+  if (!equepmentData.creatorId.equals(userData._id)) {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  res.send(equepmentData);
+});
+
+//! update 
 
 app.listen(port, () => {
   console.log("server is running on ", port);
