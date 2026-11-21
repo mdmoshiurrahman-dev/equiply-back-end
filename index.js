@@ -302,6 +302,33 @@ app.delete("/delete/equipment/:id", verifyUser, async (req, res) => {
   }
 });
 
+//! approve or reject rental equipment (admin)
+const actions = ["approve", "reject"];
+app.patch("/application-action/:action/:id", verifyUser, async (req, res) => {
+  const action = req.params.action;
+  if (!actions.includes(action)) {
+    return res.status(400).send({ message: "Bad request" });
+  }
+  const modificationId = req.params.id;
+  const userData = req.user;
+  if (userData.role !== "admin") {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  const result = await equipmentsSubmissionColl.updateOne(
+    { _id: new ObjectId(modificationId) },
+    {
+      $set: {
+        status: action,
+      },
+    },
+  );
+  if (result.acknowledged) {
+    res.send(result);
+  } else {
+    res.send({ status: false, message: "something went wrong" });
+  }
+});
+
 app.listen(port, () => {
   console.log("server is running on ", port);
 });
