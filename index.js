@@ -325,24 +325,128 @@ app.get("/all-equipment-application", verifyUser, async (req, res) => {
 });
 
 //! access all equipment list with approve status (public api with projection)
+
 app.get("/all-application-public", async (req, res) => {
-  const result = await equipmentsSubmissionColl
-    .find(
-      { status: "approve" },
+  try {
+    const {
+      category,
+      rental_type,
+      price_range,
+      availability,
+      sort_by,
+      search,
+    } = req.query;
+
+    // 1. Filtering
+    const query = {
+      status: "approve",
+    };
+
+    if (search) {
+      query.$or = [
+        { equipmentName: { $regex: search, $options: "i" } },
+        { equipmentLocation: { $regex: search, $options: "i" } },
+      ];
+    }
+    if (category && category !== "all-categories") {
+      query.equipmentCategory = category;
+    }
+
+    if (rental_type && rental_type !== "all-rental-types") {
+      query.rentalType = rental_type;
+    }
+
+    const pipeline = [
+      { $match: query },
       {
-        projection: {
-          equipmentName: 1,
-          equipmentCategory: 1,
-          equipmentPrice: 1,
-          rentalType: 1,
-          equipmentLocation: 1,
-          equipmentQuantity: 1,
-          equipmentImage: 1,
+        $addFields: {
+          equipmentPrice: {
+            $convert: {
+              input: "$equipmentPrice",
+              to: "double",
+              onError: null,
+              onNull: null,
+            },
+          },
+          equipmentQuantity: {
+            $convert: {
+              input: "$equipmentQuantity",
+              to: "double",
+              onError: 0,
+              onNull: 0,
+            },
+          },
         },
       },
-    )
-    .toArray();
-  res.send(result);
+    ];
+
+
+    if (price_range && price_range !== "all-prices") {
+      const [from, to] = price_range.split("-").map(Number);
+
+      pipeline.push({
+        $match: {
+          equipmentPrice: {
+            $gte: from,
+            $lte: to,
+          },
+        },
+      });
+    }
+
+
+    if (availability === "available") {
+      pipeline.push({
+        $match: {
+          equipmentQuantity: { $gt: 0 },
+        },
+      });
+    }
+
+    if (availability === "unavailable") {
+      pipeline.push({
+        $match: {
+          equipmentQuantity: { $eq: 0 },
+        },
+      });
+    }
+
+
+    const sortOptions = {
+      "recently-added": { creationDate: -1 },
+      "oldest-first": { creationDate: 1 },
+      "price-low-to-high": { equipmentPrice: 1 },
+      "price-high-to-low": { equipmentPrice: -1 },
+    };
+
+    const sortQuery = sortOptions[sort_by];
+
+    if (sortQuery) {
+      pipeline.push({ $sort: sortQuery });
+    }
+
+  
+    pipeline.push({
+      $project: {
+        equipmentName: 1,
+        equipmentCategory: 1,
+        equipmentPrice: 1,
+        rentalType: 1,
+        equipmentLocation: 1,
+        equipmentQuantity: 1,
+        equipmentImage: 1,
+        creationDate: 1,
+      },
+    });
+
+    const result = await equipmentsSubmissionColl.aggregate(pipeline).toArray();
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to fetch equipment",
+    });
+  }
 });
 
 //! delete rental equipment data (admin)
