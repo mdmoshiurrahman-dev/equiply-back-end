@@ -289,9 +289,15 @@ app.get("/equipment-details/:id", verifyUser, async (req, res) => {
   }
 });
 
-//! get all user data for verified users
-app.get("/get-user-data/", verifyUser, async (req, res) => {
-  const userData = req.user;
+//! get all user data for verified users ------------
+app.get("/get-user-data/:id", verifyUser, async (req, res) => {
+  const creatorId = req.params.id;
+  const userData = await userDataColl.findOne({
+    _id: new ObjectId(creatorId),
+  });
+  if (!userData) {
+    return res.send({ status: false, message: "No data found" });
+  }
   const userDataFiltered = {
     name: userData.name,
     email: userData.email,
@@ -303,7 +309,7 @@ app.get("/get-user-data/", verifyUser, async (req, res) => {
   res.send(userDataFiltered);
 });
 
-//! access all equipment list with filter (admin)
+//! access all equipment list with filter (admin only)
 
 app.get("/all-equipment-application", verifyUser, async (req, res) => {
   const userData = req.user;
@@ -316,6 +322,27 @@ app.get("/all-equipment-application", verifyUser, async (req, res) => {
   } else {
     res.send({ status: false, message: "No data found" });
   }
+});
+
+//! access all equipment list with approve status (public api with projection)
+app.get("/all-application-public", async (req, res) => {
+  const result = await equipmentsSubmissionColl
+    .find(
+      { status: "approve" },
+      {
+        projection: {
+          equipmentName: 1,
+          equipmentCategory: 1,
+          equipmentPrice: 1,
+          rentalType: 1,
+          equipmentLocation: 1,
+          equipmentQuantity: 1,
+          equipmentImage: 1,
+        },
+      },
+    )
+    .toArray();
+  res.send(result);
 });
 
 //! delete rental equipment data (admin)
