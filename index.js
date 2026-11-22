@@ -158,7 +158,6 @@ app.post("/equipment-application", verifyUser, async (req, res) => {
     status: "pending",
     creatorId: userData._id,
   };
-
   const result = await equipmentsSubmissionColl.insertOne(payload);
   if (result) {
     res.send(result);
@@ -210,6 +209,21 @@ app.put("/equipment-application/update/:id", verifyUser, async (req, res) => {
   const equepmentId = req.params.id;
   const userData = req.user;
   const updatedData = req.body;
+  const fieldsToUpdate = {
+    equipmentName: updatedData.equipmentName,
+    equipmentCategory: updatedData.equipmentCategory,
+    equipmentDescription: updatedData.equipmentDescription,
+    equipmentBrand: updatedData.equipmentBrand,
+    equipmentModel: updatedData.equipmentModel,
+    equipmentCondition: updatedData.equipmentCondition,
+    equipmentLocation: updatedData.equipmentLocation,
+    equipmentPrice: updatedData.equipmentPrice,
+    rentalType: updatedData.rentalType,
+    equipmentQuantity: updatedData.equipmentQuantity,
+    equipmentImage: updatedData.equipmentImage,
+    equipmentTerms: updatedData.equipmentTerms,
+  };
+
   if (!equepmentId || !userData || !updatedData) {
     return res.status(400).send({ message: "Bad request" });
   }
@@ -224,36 +238,40 @@ app.put("/equipment-application/update/:id", verifyUser, async (req, res) => {
     if (isReallyAdmin.role !== "admin") {
       return res.status(403).send({ message: "Forbidden" });
     }
-    const result = await equipmentsSubmissionColl.replaceOne(
+
+    const result = await equipmentsSubmissionColl.updateOne(
       { _id: new ObjectId(equepmentId) },
-      updatedData,
+      {
+        $set: fieldsToUpdate,
+      },
     );
     if (result) {
-      res.send(result);
+      return res.send(result);
     } else {
-      res.send({ status: false, message: "something went wrong" });
+      return res.send({ status: false, message: "something went wrong" });
     }
   }
   //* if user is owner --->
   const equepmentData = await equipmentsSubmissionColl.findOne({
     _id: new ObjectId(equepmentId),
   });
+
   if (!equepmentData) {
-    res.send({ status: false, message: "No data found" });
+    return res.send({ status: false, message: "No data found" });
   }
-  console.log(equepmentData.creatorId);
-  console.log(userData._id);
   if (!equepmentData.creatorId.equals(userData._id)) {
     return res.status(403).send({ message: "Forbidden" });
   }
-  const result = await equipmentsSubmissionColl.replaceOne(
-    { _id: new ObjectId(equepmentData._id) },
-    updatedData,
+  const result = await equipmentsSubmissionColl.updateOne(
+    { _id: new ObjectId(equepmentId) },
+    {
+      $set: fieldsToUpdate,
+    },
   );
   if (result) {
-    res.send(result);
+    return res.send(result);
   } else {
-    res.send({ status: false, message: "something went wrong" });
+    return res.send({ status: false, message: "something went wrong" });
   }
 });
 
