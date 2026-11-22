@@ -185,24 +185,24 @@ app.get("/equipment-application/list", verifyUser, async (req, res) => {
   }
 });
 
-//! get equepment details for provider
-app.get("/equipment-application/details/:id", verifyUser, async (req, res) => {
-  const equepmentId = req.params.id;
-  const userData = req.user;
-  if (userData.role !== "provider") {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-  const equepmentData = await equipmentsSubmissionColl.findOne({
-    _id: new ObjectId(equepmentId),
-  });
-  if (!equepmentData) {
-    res.send({ status: false, message: "No data found" });
-  }
-  if (!equepmentData.creatorId.equals(userData._id)) {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-  res.send(equepmentData);
-});
+// //! get equepment details for provider
+// app.get("/equipment-application/details/:id", verifyUser, async (req, res) => {
+//   const equepmentId = req.params.id;
+//   const userData = req.user;
+//   if (userData.role !== "provider") {
+//     return res.status(403).send({ message: "Forbidden" });
+//   }
+//   const equepmentData = await equipmentsSubmissionColl.findOne({
+//     _id: new ObjectId(equepmentId),
+//   });
+//   if (!equepmentData) {
+//     res.send({ status: false, message: "No data found" });
+//   }
+//   if (!equepmentData.creatorId.equals(userData._id)) {
+//     return res.status(403).send({ message: "Forbidden" });
+//   }
+//   res.send(equepmentData);
+// });
 
 //! update equepment application
 const allowedRole = ["provider", "admin"];
@@ -216,6 +216,7 @@ app.put("/equipment-application/update/:id", verifyUser, async (req, res) => {
   if (!allowedRole.includes(userData.role)) {
     return res.status(403).send({ message: "Forbidden" });
   }
+  //* if user is admin-->
   if (userData.role === "admin") {
     const isReallyAdmin = await userDataColl.findOne({
       _id: new ObjectId(userData._id),
@@ -223,23 +224,37 @@ app.put("/equipment-application/update/:id", verifyUser, async (req, res) => {
     if (isReallyAdmin.role !== "admin") {
       return res.status(403).send({ message: "Forbidden" });
     }
-    //do your work
+    const result = await equipmentsSubmissionColl.replaceOne(
+      { _id: new ObjectId(equepmentId) },
+      updatedData,
+    );
+    if (result) {
+      res.send(result);
+    } else {
+      res.send({ status: false, message: "something went wrong" });
+    }
   }
+  //* if user is owner --->
   const equepmentData = await equipmentsSubmissionColl.findOne({
     _id: new ObjectId(equepmentId),
   });
   if (!equepmentData) {
     res.send({ status: false, message: "No data found" });
   }
-
+  console.log(equepmentData.creatorId);
+  console.log(userData._id);
   if (!equepmentData.creatorId.equals(userData._id)) {
     return res.status(403).send({ message: "Forbidden" });
   }
   const result = await equipmentsSubmissionColl.replaceOne(
-    { _id: equepmentData._id },
+    { _id: new ObjectId(equepmentData._id) },
     updatedData,
   );
-  console.log(result);
+  if (result) {
+    res.send(result);
+  } else {
+    res.send({ status: false, message: "something went wrong" });
+  }
 });
 
 //! get all equepment details (only auth user can see it) ----------------
