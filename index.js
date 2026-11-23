@@ -30,6 +30,7 @@ const sessionCollection = database.collection("session");
 const userDataColl = database.collection("user");
 const equipmentsSubmissionColl = database.collection("equipments");
 const paymentRecord = database.collection("paymentRecord");
+const review = database.collection("review");
 
 //! stripe webhook
 app.post(
@@ -645,8 +646,33 @@ app.get("/latest-rental-equipments", async (req, res) => {
       },
     )
     .sort({ creationDate: -1 })
-    .limit(6).toArray()
+    .limit(6)
+    .toArray();
   res.send(latestApprovedApplication);
+});
+
+//! get 6 most used category
+app.get("/most-used-category", async (req, res) => {});
+
+//! update retting and comments
+app.post("/get-retting", verifyUser, async (req, res) => {
+  const reviewData = req.body;
+  const payload = {
+    ...reviewData,
+    reviewDate: new Date(),
+  };
+  const result = await review.insertOne(payload);
+  res.send(result);
+});
+
+//! get review
+
+app.get("/user-reviews", async (req, res) => {
+  const latestReviews = await review
+    .find({})
+    .sort({ reviewDate: -1 })
+    .limit(20).toArray()
+    res.send(latestReviews)
 });
 
 app.listen(port, () => {
