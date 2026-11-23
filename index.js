@@ -611,6 +611,20 @@ app.post("/payment", verifyUser, async (req, res) => {
   }
 });
 
+//! get payment record
+app.get("/get-payment-record/:id", verifyUser, async (req, res) => {
+  const userData = req.user;
+  const paymentRecordId = req.params.id;
+  const record = await paymentRecord.findOne({
+    _id: new ObjectId(paymentRecordId),
+  });
+  if (record.paymentRequestId === userData._id.toString()) {
+    res.send(record);
+  } else {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+});
+
 app.listen(port, () => {
   console.log("server is running on ", port);
 });
