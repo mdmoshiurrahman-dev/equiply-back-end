@@ -2,13 +2,14 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import { MongoClient, ObjectId } from "mongodb";
+import Stripe from "stripe";
+export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const mongodbUri = process.env.MONGO_DB_CONNECT;
 const app = express();
 const port = "5000";
 //middleware
 app.use(cors());
-app.use(express.json());
 
 //mongo connection
 const client = new MongoClient(mongodbUri);
@@ -28,7 +29,66 @@ const database = mongoDBConnection.db("Equiply");
 const sessionCollection = database.collection("session");
 const userDataColl = database.collection("user");
 const equipmentsSubmissionColl = database.collection("equipments");
+const paymentRecord = database.collection("paymentRecord");
 
+//! stripe webhook
+app.post(
+  "/api/webhooks/stripe",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const webhooksEvent = req.body;
+    const signature = req.headers["stripe-signature"];
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(
+        webhooksEvent,
+        signature,
+        process.env.STRIPE_WEBHOOK_SECRET,
+      );
+    } catch (error) {
+      console.error("Webhook Error:", error.message);
+      return res.status(400).json({ message: "Webhook Error" });
+    }
+    if (
+      event.type === "checkout.session.completed" &&
+      event.data.object.payment_status === "paid"
+    ) {
+      const session = event.data.object;
+      const metaData = session.metadata;
+      const result = await paymentRecord.updateOne(
+        { _id: new ObjectId(metaData.bookedId), payment: "pending" },
+        {
+          $set: {
+            payment: "paid",
+          },
+        },
+      );
+      const updateProductQuantity = await equipmentsSubmissionColl.updateOne(
+        { _id: new ObjectId(metaData.bookingProductId) },
+        [
+          {
+            $set: {
+              equipmentQuantity: {
+                $toString: {
+                  $subtract: [
+                    { $toInt: "$equipmentQuantity" },
+                    Number(metaData.quantity),
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      );
+    }
+
+    return res.status(200).json({
+      received: true,
+    });
+  },
+);
+
+app.use(express.json());
 app.get("/", (req, res) => {
   res.send({ message: "server is running" });
 });
@@ -380,7 +440,6 @@ app.get("/all-application-public", async (req, res) => {
       },
     ];
 
-
     if (price_range && price_range !== "all-prices") {
       const [from, to] = price_range.split("-").map(Number);
 
@@ -393,7 +452,6 @@ app.get("/all-application-public", async (req, res) => {
         },
       });
     }
-
 
     if (availability === "available") {
       pipeline.push({
@@ -411,7 +469,6 @@ app.get("/all-application-public", async (req, res) => {
       });
     }
 
-
     const sortOptions = {
       "recently-added": { creationDate: -1 },
       "oldest-first": { creationDate: 1 },
@@ -425,7 +482,6 @@ app.get("/all-application-public", async (req, res) => {
       pipeline.push({ $sort: sortQuery });
     }
 
-  
     pipeline.push({
       $project: {
         equipmentName: 1,
@@ -490,6 +546,68 @@ app.patch("/application-action/:action/:id", verifyUser, async (req, res) => {
     res.send(result);
   } else {
     res.send({ status: false, message: "something went wrong" });
+  }
+});
+//! PAYMENT SECTION ----------------------------------------------
+app.post("/payment", verifyUser, async (req, res) => {
+  const formData = req.body;
+  const requestId = req.user;
+  const equipmentData = await equipmentsSubmissionColl.findOne({
+    _id: new ObjectId(formData.equipmentId),
+  });
+  if (formData.rentalStartDate > formData.rentalEndDate) {
+    return res.send({ status: false, message: "something went wrong" });
+  }
+  const total =
+    Number(equipmentData.equipmentPrice) *
+    Number(formData.requiredQuantity) *
+    Number(formData.rentalDays);
+  const payload = {
+    ...formData,
+    payment: "pending",
+    paymentRequestId: requestId._id.toString(),
+    paymentRequestName: requestId.name,
+    paymentRequestEmail: requestId.email,
+    equipmentPrice: equipmentData.equipmentPrice,
+    total,
+  };
+  if (requestId.role !== "renter") {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  const result = await paymentRecord.insertOne(payload);
+  console.log(result);
+  if (!result) {
+    return res.send({ status: false, message: "something went wrong" });
+  }
+
+  const clientUrl = process.env.CLIENT_BASE_URL;
+  const session = await stripe.checkout.sessions.create({
+    line_items: [
+      {
+        price_data: {
+          unit_amount: Number(equipmentData.equipmentPrice) * 100,
+          currency: "usd",
+          product_data: {
+            name: String(formData.productName),
+          },
+        },
+        quantity: Number(formData.requiredQuantity),
+      },
+    ],
+    mode: "payment",
+    success_url: `${clientUrl}/payment/success?bookingId=${result.insertedId.toString()}`,
+    cancel_url: `${clientUrl}/payment/cancel`,
+    metadata: {
+      paymentInitiatorId: requestId._id.toString(),
+      bookingProductId: formData.equipmentId.toString(),
+      bookedId: result.insertedId.toString(),
+      quantity: Number(formData.requiredQuantity),
+    },
+  });
+  if (session) {
+    res.send(session);
+  } else {
+    return res.send({ status: false, message: "something went wrong" });
   }
 });
 
