@@ -671,8 +671,32 @@ app.get("/user-reviews", async (req, res) => {
   const latestReviews = await review
     .find({})
     .sort({ reviewDate: -1 })
-    .limit(20).toArray()
-    res.send(latestReviews)
+    .limit(20)
+    .toArray();
+  res.send(latestReviews);
+});
+
+//! delete a equepment application (provider)
+app.delete("/delete-equipment/:id", verifyUser, async (req, res) => {
+  const userData = req.user;
+  console.log(userData);
+  const equipmentId = req.params.id;
+  console.log(equipmentId);
+  const equipmentData = await equipmentsSubmissionColl.findOne({
+    _id: new ObjectId(equipmentId),
+  });
+  if (String(equipmentData.creatorId) === String(userData._id)) {
+    const result = await equipmentsSubmissionColl.deleteOne({
+      _id: new ObjectId(equipmentId),
+    });
+    if (result) {
+      res.send(result);
+    } else {
+      return res.send({ status: false, message: "something went wrong" });
+    }
+  } else {
+    return res.status(403).send({ message: "Forbidden" });
+  }
 });
 
 app.listen(port, () => {
