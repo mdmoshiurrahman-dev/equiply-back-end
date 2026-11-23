@@ -596,7 +596,7 @@ app.post("/payment", verifyUser, async (req, res) => {
     ],
     mode: "payment",
     success_url: `${clientUrl}/payment/success?bookingId=${result.insertedId.toString()}`,
-    cancel_url: `${clientUrl}/payment/cancel`,
+    cancel_url: `${clientUrl}/payment/cancel?bookingId=${result.insertedId.toString()}`,
     metadata: {
       paymentInitiatorId: requestId._id.toString(),
       bookingProductId: formData.equipmentId.toString(),
@@ -623,6 +623,30 @@ app.get("/get-payment-record/:id", verifyUser, async (req, res) => {
   } else {
     return res.status(403).send({ message: "Forbidden" });
   }
+});
+
+//! latest 6 approved rental equepment for featured collection ----
+
+app.get("/latest-rental-equipments", async (req, res) => {
+  const latestApprovedApplication = await equipmentsSubmissionColl
+    .find(
+      { status: "approve" },
+      {
+        projection: {
+          equipmentName: 1,
+          equipmentCategory: 1,
+          equipmentPrice: 1,
+          rentalType: 1,
+          equipmentLocation: 1,
+          equipmentQuantity: 1,
+          equipmentImage: 1,
+          creationDate: 1,
+        },
+      },
+    )
+    .sort({ creationDate: -1 })
+    .limit(6).toArray()
+  res.send(latestApprovedApplication);
 });
 
 app.listen(port, () => {
