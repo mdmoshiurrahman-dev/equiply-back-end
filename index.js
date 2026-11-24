@@ -7,7 +7,7 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const mongodbUri = process.env.MONGO_DB_CONNECT;
 const app = express();
-const port = "5000";
+const port = process.env.PORT || 5000;
 //middleware
 app.use(cors());
 
@@ -711,7 +711,6 @@ app.get("/get-payment-record", verifyUser, async (req, res) => {
     return res.send({ status: false, message: "something went wrong" });
   }
 });
-
 //! get  a specific payment record
 app.get("/get-user-payment-record/:id", verifyUser, async (req, res) => {
   const userId = req.user._id;
@@ -739,13 +738,72 @@ app.patch("/update-profile-info", async (req, res) => {
   if (result) {
     res.send(result);
   } else {
-    return res.send({ status: false, message: "something went wrong" });
+    return res.status(403).send({ message: "Forbidden" });
   }
 });
 
 //! get profile info
 app.get("/get-profile-info/", verifyUser, async (req, res) => {
   res.send(req.user);
+});
+
+app.get("/get-payment-history", verifyUser, async (req, res) => {
+  const userID = req.user._id;
+  const history = await paymentRecord
+    .find({ paymentRequestId: userID.toString() })
+    .toArray();
+  if (history) {
+    res.send(history);
+  } else {
+    return res.send({ status: false, message: "something went wrong" });
+  }
+});
+
+app.get("/all-users", verifyUser, async (req, res) => {
+  const userData = req.user;
+  if (userData.role !== "admin") {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  const allUsers = await userDataColl.find().toArray();
+  res.send(allUsers);
+});
+
+app.get("/admin-action-user/:id/:action", verifyUser, async (req, res) => {
+  const userData = req.user;
+  const actionId = req.params.id;
+  const action = req.params.action;
+  if (userData.role !== "admin") {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+
+  if (action === "delete") {
+    const result = await userDataColl.deleteOne({
+      _id: new ObjectId(actionId),
+    });
+    if (result) {
+      res.send(result);
+    } else {
+      return res.send({ status: false, message: "something went wrong" });
+    }
+  }
+  const roleBasedAction = ["admin", "renter", "provider"];
+  if (roleBasedAction.includes(action)) {
+    const result = await userDataColl.updateOne(
+      { _id: new ObjectId(actionId) },
+      {
+        $set: {
+          role: action,
+        },
+      },
+    );
+    console.log(result);
+    if (result) {
+      return res.send(result);
+    } else {
+      return res.send({ status: false, message: "something went wrong" });
+    }
+  }
+  return res.status(400).send({ message: "Bad request" });
 });
 
 app.listen(port, () => {
