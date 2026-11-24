@@ -809,3 +809,4 @@ app.get("/admin-action-user/:id/:action", verifyUser, async (req, res) => {
 app.listen(port, () => {
   console.log("server is running on ", port);
 });
+export default app;
