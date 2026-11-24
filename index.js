@@ -55,6 +55,7 @@ app.post(
       event.data.object.payment_status === "paid"
     ) {
       const session = event.data.object;
+      console.log(session);
       const metaData = session.metadata;
       const result = await paymentRecord.updateOne(
         { _id: new ObjectId(metaData.bookedId), payment: "pending" },
@@ -565,6 +566,7 @@ app.post("/payment", verifyUser, async (req, res) => {
     Number(formData.rentalDays);
   const payload = {
     ...formData,
+    equepmentOwnerId: equipmentData.creatorId,
     payment: "pending",
     paymentRequestId: requestId._id.toString(),
     paymentRequestName: requestId.name,
@@ -576,7 +578,6 @@ app.post("/payment", verifyUser, async (req, res) => {
     return res.status(403).send({ message: "Forbidden" });
   }
   const result = await paymentRecord.insertOne(payload);
-  console.log(result);
   if (!result) {
     return res.send({ status: false, message: "something went wrong" });
   }
@@ -679,9 +680,7 @@ app.get("/user-reviews", async (req, res) => {
 //! delete a equepment application (provider)
 app.delete("/delete-equipment/:id", verifyUser, async (req, res) => {
   const userData = req.user;
-  console.log(userData);
   const equipmentId = req.params.id;
-  console.log(equipmentId);
   const equipmentData = await equipmentsSubmissionColl.findOne({
     _id: new ObjectId(equipmentId),
   });
@@ -698,6 +697,37 @@ app.delete("/delete-equipment/:id", verifyUser, async (req, res) => {
     return res.status(403).send({ message: "Forbidden" });
   }
 });
+
+//! get all payment record (provider)
+app.get("/get-payment-record", verifyUser, async (req, res) => {
+  const userData = req.user;
+  const userId = userData._id;
+  const result = await paymentRecord
+    .find({ equepmentOwnerId: userId })
+    .toArray();
+  if (result) {
+    res.send(result);
+  } else {
+    return res.send({ status: false, message: "something went wrong" });
+  }
+});
+
+app.get("/get-user-payment-record/:id", verifyUser, async (req, res) => {
+  const userId = req.user._id;
+  const recordId = req.params.id;
+  const result = await paymentRecord.findOne({ _id: new ObjectId(recordId) });
+  if (result) {
+    if (userId.toString() !== result.equepmentOwnerId.toString()) {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+    res.send(result);
+  } else {
+    return res.send({ status: false, message: "something went wrong" });
+  }
+});
+
+
+
 
 app.listen(port, () => {
   console.log("server is running on ", port);
