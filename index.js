@@ -712,6 +712,7 @@ app.get("/get-payment-record", verifyUser, async (req, res) => {
   }
 });
 
+//! get  a specific payment record
 app.get("/get-user-payment-record/:id", verifyUser, async (req, res) => {
   const userId = req.user._id;
   const recordId = req.params.id;
@@ -726,8 +727,26 @@ app.get("/get-user-payment-record/:id", verifyUser, async (req, res) => {
   }
 });
 
+//! update profile info
+app.patch("/update-profile-info", async (req, res) => {
+  const { userID, ...updateInfo } = req.body;
+  const result = await userDataColl.updateOne(
+    { _id: new ObjectId(userID) },
+    {
+      $set: updateInfo,
+    },
+  );
+  if (result) {
+    res.send(result);
+  } else {
+    return res.send({ status: false, message: "something went wrong" });
+  }
+});
 
-
+//! get profile info
+app.get("/get-profile-info/", verifyUser, async (req, res) => {
+  res.send(req.user);
+});
 
 app.listen(port, () => {
   console.log("server is running on ", port);
