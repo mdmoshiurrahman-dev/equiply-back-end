@@ -806,7 +806,7 @@ app.get("/admin-action-user/:id/:action", verifyUser, async (req, res) => {
 });
 
 //! favorite collections (renters)
-//* add to list
+//* add to list toggle
 app.post("/add-to-favorite", verifyUser, async (req, res) => {
   const id = req.body.id.toString();
   const userId = req.user._id.toString();
@@ -851,6 +851,49 @@ app.get("/get-favorite/:id", verifyUser, async (req, res) => {
   } else {
     res.send({ found: false });
   }
+});
+
+//* get all favorite document via userId
+app.get("/get-fev-equipments", verifyUser, async (req, res) => {
+  const userId = req.user._id.toString();
+  const favoriteData = await favoriteColl.find({ userId }).toArray();
+  if (favoriteData.length === 0) {
+    return res.send([]);
+  }
+
+  const fevEquipments = await Promise.all(
+    favoriteData.map(async (data) => {
+      return await equipmentsSubmissionColl.findOne({
+        _id: new ObjectId(data.equipmentId),
+      });
+    }),
+  );
+  res.send(fevEquipments);
+});
+
+//* remove a specific fev item
+app.delete("/delete-fev-item/:id", verifyUser, async (req, res) => {
+  const userId = req.user._id.toString();
+  const equipmentId = req.params.id.toString();
+  const result = await favoriteColl.deleteOne({
+    equipmentId,
+    userId,
+  });
+  if (result) {
+    return res.send(result);
+  } else {
+    return res.send({ status: false, message: "something went wrong" });
+  }
+});
+//! payment record (admin)
+app.get("/get-payment-record-as-admin", verifyUser, async (req, res) => {
+  const userRole = req.user.role
+  
+  if (userRole !== "admin") {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+  const allRecord = await paymentRecord.find().toArray();
+  res.send(allRecord);
 });
 
 app.listen(port, () => {
