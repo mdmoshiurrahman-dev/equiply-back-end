@@ -806,6 +806,7 @@ app.get("/admin-action-user/:id/:action", verifyUser, async (req, res) => {
 });
 
 //! favorite collections (renters)
+//* add to list
 app.post("/add-to-favorite", verifyUser, async (req, res) => {
   const id = req.body.id.toString();
   const userId = req.user._id.toString();
@@ -834,6 +835,21 @@ app.post("/add-to-favorite", verifyUser, async (req, res) => {
     } else {
       return res.send({ status: false, message: "something went wrong" });
     }
+  }
+});
+
+//* get a specific fev document via user session
+app.get("/get-favorite/:id", verifyUser, async (req, res) => {
+  const userId = req.user._id.toString();
+  const equipmentId = req.params.id;
+  const isAlreadyExist = await favoriteColl.findOne({
+    equipmentId,
+    userId,
+  });
+  if (isAlreadyExist) {
+    res.send({ found: true });
+  } else {
+    res.send({ found: false });
   }
 });
 
