@@ -16,7 +16,7 @@ const client = new MongoClient(mongodbUri);
 export async function connectToMongoDB() {
   try {
     await client.connect();
-    console.log("You successfully connected to MongoDB!");
+    console.log("Mongodb connected successfully");
     return client;
   } catch (err) {
     console.dir(err);
@@ -24,13 +24,14 @@ export async function connectToMongoDB() {
 }
 
 const mongoDBConnection = await connectToMongoDB();
-//mongo collections
+//!mongo collections
 const database = mongoDBConnection.db("Equiply");
 const sessionCollection = database.collection("session");
 const userDataColl = database.collection("user");
 const equipmentsSubmissionColl = database.collection("equipments");
 const paymentRecord = database.collection("paymentRecord");
 const review = database.collection("review");
+const favoriteColl = database.collection("favorite");
 
 //! stripe webhook
 app.post(
@@ -55,7 +56,6 @@ app.post(
       event.data.object.payment_status === "paid"
     ) {
       const session = event.data.object;
-      console.log(session);
       const metaData = session.metadata;
       const result = await paymentRecord.updateOne(
         { _id: new ObjectId(metaData.bookedId), payment: "pending" },
@@ -796,7 +796,6 @@ app.get("/admin-action-user/:id/:action", verifyUser, async (req, res) => {
         },
       },
     );
-    console.log(result);
     if (result) {
       return res.send(result);
     } else {
@@ -804,6 +803,38 @@ app.get("/admin-action-user/:id/:action", verifyUser, async (req, res) => {
     }
   }
   return res.status(400).send({ message: "Bad request" });
+});
+
+//! favorite collections (renters)
+app.post("/add-to-favorite", verifyUser, async (req, res) => {
+  const id = req.body.id.toString();
+  const userId = req.user._id.toString();
+  const payload = {
+    equipmentId: id,
+    userId,
+  };
+  const isAlreadyExist = await favoriteColl.findOne({
+    equipmentId: id,
+    userId,
+  });
+  if (isAlreadyExist) {
+    const result = await favoriteColl.deleteOne({
+      equipmentId: id,
+      userId,
+    });
+    if (result) {
+      return res.send(result);
+    } else {
+      return res.send({ status: false, message: "something went wrong" });
+    }
+  } else {
+    const result = await favoriteColl.insertOne(payload);
+    if (result) {
+      return res.send(result);
+    } else {
+      return res.send({ status: false, message: "something went wrong" });
+    }
+  }
 });
 
 app.listen(port, () => {
