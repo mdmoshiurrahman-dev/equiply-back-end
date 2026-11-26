@@ -905,7 +905,7 @@ app.get("/top-six-category", async (req, res) => {
           $group: {
             _id: "$equipmentCategory",
             totalEquipment: { $sum: 1 },
-             equipmentImage: { $first: "$equipmentImage" },
+            equipmentImage: { $first: "$equipmentImage" },
           },
         },
         {
@@ -919,6 +919,18 @@ app.get("/top-six-category", async (req, res) => {
       ])
       .toArray();
     res.send(result);
+  } catch (error) {
+    res.send({ message: "something is wrong", error: error });
+  }
+});
+
+//get percentage of success/failed rate in payment record
+app.get("/payment-success-failed-rate", async (req, res) => {
+  try {
+    const successRate = await paymentRecord.countDocuments({ payment: "paid" });
+    const total = await paymentRecord.countDocuments({});
+    const failed = total - successRate;
+    res.send({ success: successRate, failed: failed, total: total });
   } catch (error) {
     res.send({ message: "something is wrong", error: error });
   }
