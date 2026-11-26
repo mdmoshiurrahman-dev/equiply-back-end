@@ -3,6 +3,7 @@ import cors from "cors";
 import "dotenv/config";
 import { MongoClient, ObjectId } from "mongodb";
 import Stripe from "stripe";
+import { jwtVerify, createRemoteJWKSet } from "jose";
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const mongodbUri = process.env.MONGO_DB_CONNECT;
@@ -115,6 +116,28 @@ const verifyUser = async (req, res, next) => {
     return res.status(401).send({ message: "Unauthorized" });
   }
   req.user = applicantUser;
+  next();
+};
+
+//! jwt token middleware -------------
+const jsonWebTokenVerify = async (req, res, next) => {
+  const jwtToken = req.headers["jwt-token"];
+  if (!jwtToken) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+  const token = jwtToken.split(" ")[1];
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+
+  try {
+    const JWKS = createRemoteJWKSet(
+      new URL(`${process.env.CLIENT_BASE_URL}/api/auth/jwks`),
+    );
+    const { payload } = await jwtVerify(token, JWKS);
+  } catch (error) {
+    console.error("Token validation failed:", error);
+  }
   next();
 };
 
@@ -339,17 +362,22 @@ app.put("/equipment-application/update/:id", verifyUser, async (req, res) => {
 
 //! get all equepment details (only auth user can see it) ----------------
 
-app.get("/equipment-details/:id", verifyUser, async (req, res) => {
-  const equipmentId = req.params.id;
-  const result = await equipmentsSubmissionColl.findOne({
-    _id: new ObjectId(equipmentId),
-  });
-  if (result) {
-    res.send(result);
-  } else {
-    res.send({ status: false, message: "No data found" });
-  }
-});
+app.get(
+  "/equipment-details/:id",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const equipmentId = req.params.id;
+    const result = await equipmentsSubmissionColl.findOne({
+      _id: new ObjectId(equipmentId),
+    });
+    if (result) {
+      res.send(result);
+    } else {
+      res.send({ status: false, message: "No data found" });
+    }
+  },
+);
 
 //! get all user data for verified users ------------
 app.get("/get-user-data/:id", verifyUser, async (req, res) => {
@@ -839,19 +867,24 @@ app.post("/add-to-favorite", verifyUser, async (req, res) => {
 });
 
 //* get a specific fev document via user session
-app.get("/get-favorite/:id", verifyUser, async (req, res) => {
-  const userId = req.user._id.toString();
-  const equipmentId = req.params.id;
-  const isAlreadyExist = await favoriteColl.findOne({
-    equipmentId,
-    userId,
-  });
-  if (isAlreadyExist) {
-    res.send({ found: true });
-  } else {
-    res.send({ found: false });
-  }
-});
+app.get(
+  "/get-favorite/:id",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userId = req.user._id.toString();
+    const equipmentId = req.params.id;
+    const isAlreadyExist = await favoriteColl.findOne({
+      equipmentId,
+      userId,
+    });
+    if (isAlreadyExist) {
+      res.send({ found: true });
+    } else {
+      res.send({ found: false });
+    }
+  },
+);
 
 //* get all favorite document via userId
 app.get("/get-fev-equipments", verifyUser, async (req, res) => {
