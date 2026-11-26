@@ -15,6 +15,7 @@ Built with **Node.js**, **Express 5**, **MongoDB**, and **Stripe**.
 - [Environment Variables](#-environment-variables)
 - [Running the Server](#-running-the-server)
 - [Roles & Access Levels](#-roles--access-levels)
+- [JWT Authentication](#-jwt-authentication)
 - [API Reference](#-api-reference)
 - [Payment Flow (Stripe)](#-payment-flow-stripe)
 - [Database Collections](#-database-collections)
@@ -31,6 +32,7 @@ Built with **Node.js**, **Express 5**, **MongoDB**, and **Stripe**.
 | [Express 5](https://expressjs.com/) | Web framework / REST API |
 | [MongoDB](https://www.mongodb.com/) (native driver v7) | Database (Atlas replica set) |
 | [Stripe](https://stripe.com/) (Node SDK v23) | Checkout payments & webhooks |
+| [jose](https://www.npmjs.com/package/jose) | JWT verification with remote JWK sets |
 | [CORS](https://www.npmjs.com/package/cors) | Cross-origin resource sharing |
 | [dotenv](https://www.npmjs.com/package/dotenv) | Environment configuration |
 
@@ -38,8 +40,9 @@ Built with **Node.js**, **Express 5**, **MongoDB**, and **Stripe**.
 
 ## ✨ Features
 
-- 🔐 **Session-token authentication** — every protected route requires an `Authorization: Bearer <token>` header validated against a `session` collection in MongoDB.
-- 👥 **Role-based access control (RBAC)** — four roles: `none`, `pending`, `provider`, `renter`, `admin`. Admins approve or dismiss provider/renter applications and manage all users.
+- 🔐 **JWT + session authentication** — protected routes require both an authorization session token and a verified JWT. JWTs are validated through the frontend application's remote JWKS endpoint.
+- 🎟️ **Session-token authentication** — protected routes require an `Authorization: Bearer <token>` header validated against a `session` collection in MongoDB.
+- 👥 **Role-based access control (RBAC)** — five roles: `none`, `pending`, `provider`, `renter`, `admin`. Admins approve or dismiss provider/renter applications and manage all users.
 - 🧰 **Equipment listing management** — providers submit equipment applications, view their own listings, update or delete them; admins approve/reject/delete any listing.
 - 🔎 **Public equipment catalog** — a public aggregation endpoint with **filtering** (category, rental type, price range, availability), **searching** (name/location), and **sorting** (recently added, oldest, price low→high, price high→low) using the MongoDB Aggregation Pipeline.
 - 💳 **Stripe Checkout payments** — creates a Stripe Checkout session for bookings and handles the `checkout.session.completed` webhook to mark payments as paid and decrement equipment stock.
@@ -66,13 +69,14 @@ Inside `index.js` the code is organized in sections:
 1. Middleware setup (CORS)
 2. MongoDB connection & collections
 3. Stripe webhook (before `express.json()` so the **raw body** is available for signature verification)
-4. `verifyUser` authentication middleware
-5. User application / admin management routes
-6. Equipment application & listing routes
-7. Public catalog & featured routes
-8. Payment & payment-record routes
-9. Reviews, favorites & statistics routes
-10. Server listener
+4. `verifyUser` session authentication middleware
+5. `jsonWebTokenVerify` JWT verification middleware
+6. User application / admin management routes
+7. Equipment application & listing routes
+8. Public catalog & featured routes
+9. Payment & payment-record routes
+10. Reviews, favorites & statistics routes
+11. Server listener
 
 ---
 
@@ -158,18 +162,52 @@ none ──submit application──▶ pending ──admin approves──▶ pro
 | `renter` | Customer | Book & pay for equipment, manage favorites, leave reviews, view payment history |
 | `admin` | Administrator | Approve/dismiss applications, manage all equipment & users, view all payment records & stats |
 
-**Authentication:** protected routes require the session token in the header:
+**Authentication:** JWT-protected routes require both authentication headers:
 
 ```
 Authorization: Bearer <session-token>
+jwt-token: Bearer <jwt>
 ```
+
+---
+
+## 🔑 JWT Authentication
+
+Equiply uses a two-layer authentication process for protected routes:
+
+1. The MongoDB-backed `verifyUser` middleware validates the session token from:
+
+   ```http
+   Authorization: Bearer <session-token>
+   ```
+
+2. The `jsonWebTokenVerify` middleware validates the JWT from:
+
+   ```http
+   jwt-token: Bearer <jwt>
+   ```
+
+The JWT is verified using the application's JWKS URL:
+
+```text
+${CLIENT_BASE_URL}/api/auth/jwks
+```
+
+Example request headers:
+
+```http
+Authorization: Bearer mongodb-session-token
+jwt-token: Bearer eyJhbGciOiJSUzI1NiIs...
+```
+
+Both tokens must be valid. Requests with missing or invalid tokens receive `401 Unauthorized`.
 
 ---
 
 ## 📡 API Reference
 
 Base URL: `http://localhost:5000`
-🔓 = public · 🔐 = requires auth token · 🛡️ = role-restricted
+🔓 = public · 🔐 = requires session token + JWT · 🛡️ = role-restricted
 
 ### Health
 
@@ -332,7 +370,9 @@ Database name: **`Equiply`**
 
 ## 🔒 Security Notes
 
-- **Authentication** uses session tokens stored in MongoDB — no JWT signature verification, so revoking a session row instantly invalidates the token.
+- **Session authentication** uses session tokens stored in MongoDB, so revoking a session row instantly invalidates that session.
+- **JWT authentication** uses `jose.jwtVerify` and a remote JWK set from `${CLIENT_BASE_URL}/api/auth/jwks`. JWKS public keys are fetched dynamically and used to verify the JWT signature.
+- **Dual-header authentication** requires both `Authorization: Bearer <session-token>` and `jwt-token: Bearer <jwt>` for JWT-protected routes.
 - **Stripe webhook** signature is verified with `constructEvent` against `STRIPE_WEBHOOK_SECRET`.
 - CORS is currently **fully open** (`cors()` with no options) — restrict the origin to your frontend domain for production.
 - Secrets live in `.env` — keep it out of version control and never commit real keys.
