@@ -135,139 +135,171 @@ const jsonWebTokenVerify = async (req, res, next) => {
       new URL(`${process.env.CLIENT_BASE_URL}/api/auth/jwks`),
     );
     const { payload } = await jwtVerify(token, JWKS);
+    if (payload) {
+      return next();
+    }
   } catch (error) {
     console.error("Token validation failed:", error);
   }
-  next();
 };
 
 //! handel submission request for to be provider ---------
-app.post("/update-user-data", verifyUser, async (req, res) => {
-  const userData = req.user;
-  if (userData.role !== "none") {
-    return res.status(403).send({ message: "Forbidden" });
-  }
+app.post(
+  "/update-user-data",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userData = req.user;
+    if (userData.role !== "none") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
 
-  const submittedData = req.body;
-  const result = await userDataColl.updateOne(
-    { _id: new ObjectId(userData._id) },
-    {
-      $set: submittedData,
-    },
-  );
-  if (result.acknowledged) {
-    res.send(result);
-  } else {
-    res.send({ message: "something went wrong" });
-  }
-});
+    const submittedData = req.body;
+    const result = await userDataColl.updateOne(
+      { _id: new ObjectId(userData._id) },
+      {
+        $set: submittedData,
+      },
+    );
+    if (result.acknowledged) {
+      res.send(result);
+    } else {
+      res.send({ message: "something went wrong" });
+    }
+  },
+);
 
 //*----------------------------------------------------------------
 
 //! handel to be renter request data---------
-app.post("/update-renter-data", verifyUser, async (req, res) => {
-  const userData = req.user;
-  if (userData.role !== "none") {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-  const submittedData = req.body;
-  const result = await userDataColl.updateOne(
-    { _id: new ObjectId(userData._id) },
-    {
-      $set: submittedData,
-    },
-  );
-  if (result.acknowledged) {
-    res.send(result);
-  } else {
-    res.send({ message: "something went wrong" });
-  }
-});
+app.post(
+  "/update-renter-data",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userData = req.user;
+    if (userData.role !== "none") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+    const submittedData = req.body;
+    const result = await userDataColl.updateOne(
+      { _id: new ObjectId(userData._id) },
+      {
+        $set: submittedData,
+      },
+    );
+    if (result.acknowledged) {
+      res.send(result);
+    } else {
+      res.send({ message: "something went wrong" });
+    }
+  },
+);
 
 //! get all applicant data
-app.get("/get-all-applicant-data", verifyUser, async (req, res) => {
-  const userData = req.user;
+app.get(
+  "/get-all-applicant-data",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userData = req.user;
 
-  if (userData.role !== "admin") {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-  const result = await userDataColl.find({ role: "pending" }).toArray();
-  if (result) {
-    res.send(result);
-  } else {
-    res.send({ message: "something went wrong" });
-  }
-});
+    if (userData.role !== "admin") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+    const result = await userDataColl.find({ role: "pending" }).toArray();
+    if (result) {
+      res.send(result);
+    } else {
+      res.send({ message: "something went wrong" });
+    }
+  },
+);
 
 //! application delete/approve request handler
 
 const type = ["provider", "dismissRequest"];
-app.patch("/set-user-role/:action", verifyUser, async (req, res) => {
-  const applicantId = req.body.applicantId;
-  const actionType = req.params.action;
-  const userData = req.user;
-  if (!type.includes(actionType)) {
-    return res.status(400).send({ message: "Bad request" });
-  }
-  if (!applicantId || !actionType || !userData) {
-    return res.status(400).send({ message: "Bad request" });
-  }
+app.patch(
+  "/set-user-role/:action",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const applicantId = req.body.applicantId;
+    const actionType = req.params.action;
+    const userData = req.user;
+    if (!type.includes(actionType)) {
+      return res.status(400).send({ message: "Bad request" });
+    }
+    if (!applicantId || !actionType || !userData) {
+      return res.status(400).send({ message: "Bad request" });
+    }
 
-  if (userData.role !== "admin") {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-  const updateApplicant = await userDataColl.updateOne(
-    { _id: new ObjectId(applicantId) },
-    {
-      $set: {
-        role: actionType,
+    if (userData.role !== "admin") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+    const updateApplicant = await userDataColl.updateOne(
+      { _id: new ObjectId(applicantId) },
+      {
+        $set: {
+          role: actionType,
+        },
       },
-    },
-  );
-  if (updateApplicant.acknowledged) {
-    res.send({ status: true, message: "Action is processed" });
-  } else {
-    res.send({ status: false, message: "something went wrong" });
-  }
-});
+    );
+    if (updateApplicant.acknowledged) {
+      res.send({ status: true, message: "Action is processed" });
+    } else {
+      res.send({ status: false, message: "something went wrong" });
+    }
+  },
+);
 
 //! equepment application handel
-app.post("/equipment-application", verifyUser, async (req, res) => {
-  const submittedData = req.body;
-  const userData = req.user;
-  if (userData.role !== "provider") {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-  const payload = {
-    ...submittedData,
-    status: "pending",
-    creatorId: userData._id,
-  };
-  const result = await equipmentsSubmissionColl.insertOne(payload);
-  if (result) {
-    res.send(result);
-  } else {
-    res.send({ status: false, message: "something went wrong" });
-  }
-});
+app.post(
+  "/equipment-application",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const submittedData = req.body;
+    const userData = req.user;
+    if (userData.role !== "provider") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+    const payload = {
+      ...submittedData,
+      status: "pending",
+      creatorId: userData._id,
+    };
+    const result = await equipmentsSubmissionColl.insertOne(payload);
+    if (result) {
+      res.send(result);
+    } else {
+      res.send({ status: false, message: "something went wrong" });
+    }
+  },
+);
 
 //! show equepment application lists created by owner
-app.get("/equipment-application/list", verifyUser, async (req, res) => {
-  const userData = req.user;
-  if (userData.role !== "provider") {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-  const result = await equipmentsSubmissionColl
-    .find({
-      creatorId: userData._id,
-    })
-    .toArray();
-  if (result) {
-    res.send(result);
-  } else {
-    res.send({ status: false, message: "something went wrong" });
-  }
-});
+app.get(
+  "/equipment-application/list",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userData = req.user;
+    if (userData.role !== "provider") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+    const result = await equipmentsSubmissionColl
+      .find({
+        creatorId: userData._id,
+      })
+      .toArray();
+    if (result) {
+      res.send(result);
+    } else {
+      res.send({ status: false, message: "something went wrong" });
+    }
+  },
+);
 
 // //! get equepment details for provider
 // app.get("/equipment-application/details/:id", verifyUser, async (req, res) => {
@@ -290,40 +322,67 @@ app.get("/equipment-application/list", verifyUser, async (req, res) => {
 
 //! update equepment application
 const allowedRole = ["provider", "admin"];
-app.put("/equipment-application/update/:id", verifyUser, async (req, res) => {
-  const equepmentId = req.params.id;
-  const userData = req.user;
-  const updatedData = req.body;
-  const fieldsToUpdate = {
-    equipmentName: updatedData.equipmentName,
-    equipmentCategory: updatedData.equipmentCategory,
-    equipmentDescription: updatedData.equipmentDescription,
-    equipmentBrand: updatedData.equipmentBrand,
-    equipmentModel: updatedData.equipmentModel,
-    equipmentCondition: updatedData.equipmentCondition,
-    equipmentLocation: updatedData.equipmentLocation,
-    equipmentPrice: updatedData.equipmentPrice,
-    rentalType: updatedData.rentalType,
-    equipmentQuantity: updatedData.equipmentQuantity,
-    equipmentImage: updatedData.equipmentImage,
-    equipmentTerms: updatedData.equipmentTerms,
-  };
+app.put(
+  "/equipment-application/update/:id",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const equepmentId = req.params.id;
+    const userData = req.user;
+    const updatedData = req.body;
+    const fieldsToUpdate = {
+      equipmentName: updatedData.equipmentName,
+      equipmentCategory: updatedData.equipmentCategory,
+      equipmentDescription: updatedData.equipmentDescription,
+      equipmentBrand: updatedData.equipmentBrand,
+      equipmentModel: updatedData.equipmentModel,
+      equipmentCondition: updatedData.equipmentCondition,
+      equipmentLocation: updatedData.equipmentLocation,
+      equipmentPrice: updatedData.equipmentPrice,
+      rentalType: updatedData.rentalType,
+      equipmentQuantity: updatedData.equipmentQuantity,
+      equipmentImage: updatedData.equipmentImage,
+      equipmentTerms: updatedData.equipmentTerms,
+    };
 
-  if (!equepmentId || !userData || !updatedData) {
-    return res.status(400).send({ message: "Bad request" });
-  }
-  if (!allowedRole.includes(userData.role)) {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-  //* if user is admin-->
-  if (userData.role === "admin") {
-    const isReallyAdmin = await userDataColl.findOne({
-      _id: new ObjectId(userData._id),
-    });
-    if (isReallyAdmin.role !== "admin") {
+    if (!equepmentId || !userData || !updatedData) {
+      return res.status(400).send({ message: "Bad request" });
+    }
+    if (!allowedRole.includes(userData.role)) {
       return res.status(403).send({ message: "Forbidden" });
     }
+    //* if user is admin-->
+    if (userData.role === "admin") {
+      const isReallyAdmin = await userDataColl.findOne({
+        _id: new ObjectId(userData._id),
+      });
+      if (isReallyAdmin.role !== "admin") {
+        return res.status(403).send({ message: "Forbidden" });
+      }
 
+      const result = await equipmentsSubmissionColl.updateOne(
+        { _id: new ObjectId(equepmentId) },
+        {
+          $set: fieldsToUpdate,
+        },
+      );
+      if (result) {
+        return res.send(result);
+      } else {
+        return res.send({ status: false, message: "something went wrong" });
+      }
+    }
+    //* if user is owner --->
+    const equepmentData = await equipmentsSubmissionColl.findOne({
+      _id: new ObjectId(equepmentId),
+    });
+
+    if (!equepmentData) {
+      return res.send({ status: false, message: "No data found" });
+    }
+    if (!equepmentData.creatorId.equals(userData._id)) {
+      return res.status(403).send({ message: "Forbidden" });
+    }
     const result = await equipmentsSubmissionColl.updateOne(
       { _id: new ObjectId(equepmentId) },
       {
@@ -335,30 +394,8 @@ app.put("/equipment-application/update/:id", verifyUser, async (req, res) => {
     } else {
       return res.send({ status: false, message: "something went wrong" });
     }
-  }
-  //* if user is owner --->
-  const equepmentData = await equipmentsSubmissionColl.findOne({
-    _id: new ObjectId(equepmentId),
-  });
-
-  if (!equepmentData) {
-    return res.send({ status: false, message: "No data found" });
-  }
-  if (!equepmentData.creatorId.equals(userData._id)) {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-  const result = await equipmentsSubmissionColl.updateOne(
-    { _id: new ObjectId(equepmentId) },
-    {
-      $set: fieldsToUpdate,
-    },
-  );
-  if (result) {
-    return res.send(result);
-  } else {
-    return res.send({ status: false, message: "something went wrong" });
-  }
-});
+  },
+);
 
 //! get all equepment details (only auth user can see it) ----------------
 
@@ -380,39 +417,49 @@ app.get(
 );
 
 //! get all user data for verified users ------------
-app.get("/get-user-data/:id", verifyUser, async (req, res) => {
-  const creatorId = req.params.id;
-  const userData = await userDataColl.findOne({
-    _id: new ObjectId(creatorId),
-  });
-  if (!userData) {
-    return res.send({ status: false, message: "No data found" });
-  }
-  const userDataFiltered = {
-    name: userData.name,
-    email: userData.email,
-    account_type: userData.account_type,
-    business_address: userData.business_address,
-    tel_no: userData.tel_no,
-    user_image: userData.user_image,
-  };
-  res.send(userDataFiltered);
-});
+app.get(
+  "/get-user-data/:id",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const creatorId = req.params.id;
+    const userData = await userDataColl.findOne({
+      _id: new ObjectId(creatorId),
+    });
+    if (!userData) {
+      return res.send({ status: false, message: "No data found" });
+    }
+    const userDataFiltered = {
+      name: userData.name,
+      email: userData.email,
+      account_type: userData.account_type,
+      business_address: userData.business_address,
+      tel_no: userData.tel_no,
+      user_image: userData.user_image,
+    };
+    res.send(userDataFiltered);
+  },
+);
 
 //! access all equipment list with filter (admin only)
 
-app.get("/all-equipment-application", verifyUser, async (req, res) => {
-  const userData = req.user;
-  if (userData.role !== "admin") {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-  const result = await equipmentsSubmissionColl.find().toArray();
-  if (result) {
-    res.send(result);
-  } else {
-    res.send({ status: false, message: "No data found" });
-  }
-});
+app.get(
+  "/all-equipment-application",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userData = req.user;
+    if (userData.role !== "admin") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+    const result = await equipmentsSubmissionColl.find().toArray();
+    if (result) {
+      res.send(result);
+    } else {
+      res.send({ status: false, message: "No data found" });
+    }
+  },
+);
 
 //! access all equipment list with approve status (public api with projection)
 
@@ -536,50 +583,60 @@ app.get("/all-application-public", async (req, res) => {
 });
 
 //! delete rental equipment data (admin)
-app.delete("/delete/equipment/:id", verifyUser, async (req, res) => {
-  const deleteRequestItemId = req.params.id;
-  const apiRequester = req.user;
-  if (apiRequester.role !== "admin") {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-  const result = await equipmentsSubmissionColl.deleteOne({
-    _id: new ObjectId(deleteRequestItemId),
-  });
-  if (result.acknowledged) {
-    res.send(result);
-  } else {
-    res.send({ status: false, message: "something went wrong" });
-  }
-});
+app.delete(
+  "/delete/equipment/:id",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const deleteRequestItemId = req.params.id;
+    const apiRequester = req.user;
+    if (apiRequester.role !== "admin") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+    const result = await equipmentsSubmissionColl.deleteOne({
+      _id: new ObjectId(deleteRequestItemId),
+    });
+    if (result.acknowledged) {
+      res.send(result);
+    } else {
+      res.send({ status: false, message: "something went wrong" });
+    }
+  },
+);
 
 //! approve or reject rental equipment (admin)
 const actions = ["approve", "reject"];
-app.patch("/application-action/:action/:id", verifyUser, async (req, res) => {
-  const action = req.params.action;
-  if (!actions.includes(action)) {
-    return res.status(400).send({ message: "Bad request" });
-  }
-  const modificationId = req.params.id;
-  const userData = req.user;
-  if (userData.role !== "admin") {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-  const result = await equipmentsSubmissionColl.updateOne(
-    { _id: new ObjectId(modificationId) },
-    {
-      $set: {
-        status: action,
+app.patch(
+  "/application-action/:action/:id",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const action = req.params.action;
+    if (!actions.includes(action)) {
+      return res.status(400).send({ message: "Bad request" });
+    }
+    const modificationId = req.params.id;
+    const userData = req.user;
+    if (userData.role !== "admin") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+    const result = await equipmentsSubmissionColl.updateOne(
+      { _id: new ObjectId(modificationId) },
+      {
+        $set: {
+          status: action,
+        },
       },
-    },
-  );
-  if (result.acknowledged) {
-    res.send(result);
-  } else {
-    res.send({ status: false, message: "something went wrong" });
-  }
-});
+    );
+    if (result.acknowledged) {
+      res.send(result);
+    } else {
+      res.send({ status: false, message: "something went wrong" });
+    }
+  },
+);
 //! PAYMENT SECTION ----------------------------------------------
-app.post("/payment", verifyUser, async (req, res) => {
+app.post("/payment", verifyUser, jsonWebTokenVerify, async (req, res) => {
   const formData = req.body;
   const requestId = req.user;
   const equipmentData = await equipmentsSubmissionColl.findOne({
@@ -642,18 +699,23 @@ app.post("/payment", verifyUser, async (req, res) => {
 });
 
 //! get payment record
-app.get("/get-payment-record/:id", verifyUser, async (req, res) => {
-  const userData = req.user;
-  const paymentRecordId = req.params.id;
-  const record = await paymentRecord.findOne({
-    _id: new ObjectId(paymentRecordId),
-  });
-  if (record.paymentRequestId === userData._id.toString()) {
-    res.send(record);
-  } else {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-});
+app.get(
+  "/get-payment-record/:id",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userData = req.user;
+    const paymentRecordId = req.params.id;
+    const record = await paymentRecord.findOne({
+      _id: new ObjectId(paymentRecordId),
+    });
+    if (record.paymentRequestId === userData._id.toString()) {
+      res.send(record);
+    } else {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+  },
+);
 
 //! latest 6 approved rental equepment for featured collection ----
 
@@ -684,7 +746,7 @@ app.get("/latest-rental-equipments", async (req, res) => {
 app.get("/most-used-category", async (req, res) => {});
 
 //! update retting and comments
-app.post("/get-retting", verifyUser, async (req, res) => {
+app.post("/get-retting", verifyUser, jsonWebTokenVerify, async (req, res) => {
   const reviewData = req.body;
   const payload = {
     ...reviewData,
@@ -706,53 +768,68 @@ app.get("/user-reviews", async (req, res) => {
 });
 
 //! delete a equepment application (provider)
-app.delete("/delete-equipment/:id", verifyUser, async (req, res) => {
-  const userData = req.user;
-  const equipmentId = req.params.id;
-  const equipmentData = await equipmentsSubmissionColl.findOne({
-    _id: new ObjectId(equipmentId),
-  });
-  if (String(equipmentData.creatorId) === String(userData._id)) {
-    const result = await equipmentsSubmissionColl.deleteOne({
+app.delete(
+  "/delete-equipment/:id",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userData = req.user;
+    const equipmentId = req.params.id;
+    const equipmentData = await equipmentsSubmissionColl.findOne({
       _id: new ObjectId(equipmentId),
     });
+    if (String(equipmentData.creatorId) === String(userData._id)) {
+      const result = await equipmentsSubmissionColl.deleteOne({
+        _id: new ObjectId(equipmentId),
+      });
+      if (result) {
+        res.send(result);
+      } else {
+        return res.send({ status: false, message: "something went wrong" });
+      }
+    } else {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+  },
+);
+
+//! get all payment record (provider)
+app.get(
+  "/get-payment-record",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userData = req.user;
+    const userId = userData._id;
+    const result = await paymentRecord
+      .find({ equepmentOwnerId: userId })
+      .toArray();
     if (result) {
       res.send(result);
     } else {
       return res.send({ status: false, message: "something went wrong" });
     }
-  } else {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-});
-
-//! get all payment record (provider)
-app.get("/get-payment-record", verifyUser, async (req, res) => {
-  const userData = req.user;
-  const userId = userData._id;
-  const result = await paymentRecord
-    .find({ equepmentOwnerId: userId })
-    .toArray();
-  if (result) {
-    res.send(result);
-  } else {
-    return res.send({ status: false, message: "something went wrong" });
-  }
-});
+  },
+);
 //! get  a specific payment record
-app.get("/get-user-payment-record/:id", verifyUser, async (req, res) => {
-  const userId = req.user._id;
-  const recordId = req.params.id;
-  const result = await paymentRecord.findOne({ _id: new ObjectId(recordId) });
-  if (result) {
-    if (userId.toString() !== result.equepmentOwnerId.toString()) {
-      return res.status(403).send({ message: "Forbidden" });
+app.get(
+  "/get-user-payment-record/:id",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userId = req.user._id;
+    const recordId = req.params.id;
+    const result = await paymentRecord.findOne({ _id: new ObjectId(recordId) });
+    if (result) {
+      if (userId.toString() !== result.equepmentOwnerId.toString()) {
+        return res.status(403).send({ message: "Forbidden" });
+      }
+      res.send(result);
+    } else {
+      return res.send({ status: false, message: "something went wrong" });
     }
-    res.send(result);
-  } else {
-    return res.send({ status: false, message: "something went wrong" });
-  }
-});
+  },
+);
 
 //! update profile info
 app.patch("/update-profile-info", async (req, res) => {
@@ -771,21 +848,31 @@ app.patch("/update-profile-info", async (req, res) => {
 });
 
 //! get profile info
-app.get("/get-profile-info/", verifyUser, async (req, res) => {
-  res.send(req.user);
-});
+app.get(
+  "/get-profile-info/",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    res.send(req.user);
+  },
+);
 
-app.get("/get-payment-history", verifyUser, async (req, res) => {
-  const userID = req.user._id;
-  const history = await paymentRecord
-    .find({ paymentRequestId: userID.toString() })
-    .toArray();
-  if (history) {
-    res.send(history);
-  } else {
-    return res.send({ status: false, message: "something went wrong" });
-  }
-});
+app.get(
+  "/get-payment-history",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userID = req.user._id;
+    const history = await paymentRecord
+      .find({ paymentRequestId: userID.toString() })
+      .toArray();
+    if (history) {
+      res.send(history);
+    } else {
+      return res.send({ status: false, message: "something went wrong" });
+    }
+  },
+);
 
 app.get("/all-users", verifyUser, async (req, res) => {
   const userData = req.user;
@@ -796,75 +883,85 @@ app.get("/all-users", verifyUser, async (req, res) => {
   res.send(allUsers);
 });
 
-app.get("/admin-action-user/:id/:action", verifyUser, async (req, res) => {
-  const userData = req.user;
-  const actionId = req.params.id;
-  const action = req.params.action;
-  if (userData.role !== "admin") {
-    return res.status(403).send({ message: "Forbidden" });
-  }
+app.get(
+  "/admin-action-user/:id/:action",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userData = req.user;
+    const actionId = req.params.id;
+    const action = req.params.action;
+    if (userData.role !== "admin") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
 
-  if (action === "delete") {
-    const result = await userDataColl.deleteOne({
-      _id: new ObjectId(actionId),
-    });
-    if (result) {
-      res.send(result);
-    } else {
-      return res.send({ status: false, message: "something went wrong" });
+    if (action === "delete") {
+      const result = await userDataColl.deleteOne({
+        _id: new ObjectId(actionId),
+      });
+      if (result) {
+        res.send(result);
+      } else {
+        return res.send({ status: false, message: "something went wrong" });
+      }
     }
-  }
-  const roleBasedAction = ["admin", "renter", "provider"];
-  if (roleBasedAction.includes(action)) {
-    const result = await userDataColl.updateOne(
-      { _id: new ObjectId(actionId) },
-      {
-        $set: {
-          role: action,
+    const roleBasedAction = ["admin", "renter", "provider"];
+    if (roleBasedAction.includes(action)) {
+      const result = await userDataColl.updateOne(
+        { _id: new ObjectId(actionId) },
+        {
+          $set: {
+            role: action,
+          },
         },
-      },
-    );
-    if (result) {
-      return res.send(result);
-    } else {
-      return res.send({ status: false, message: "something went wrong" });
+      );
+      if (result) {
+        return res.send(result);
+      } else {
+        return res.send({ status: false, message: "something went wrong" });
+      }
     }
-  }
-  return res.status(400).send({ message: "Bad request" });
-});
+    return res.status(400).send({ message: "Bad request" });
+  },
+);
 
 //! favorite collections (renters)
 //* add to list toggle
-app.post("/add-to-favorite", verifyUser, async (req, res) => {
-  const id = req.body.id.toString();
-  const userId = req.user._id.toString();
-  const payload = {
-    equipmentId: id,
-    userId,
-  };
-  const isAlreadyExist = await favoriteColl.findOne({
-    equipmentId: id,
-    userId,
-  });
-  if (isAlreadyExist) {
-    const result = await favoriteColl.deleteOne({
+app.post(
+  "/add-to-favorite",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const id = req.body.id.toString();
+    const userId = req.user._id.toString();
+    const payload = {
+      equipmentId: id,
+      userId,
+    };
+    const isAlreadyExist = await favoriteColl.findOne({
       equipmentId: id,
       userId,
     });
-    if (result) {
-      return res.send(result);
+    if (isAlreadyExist) {
+      const result = await favoriteColl.deleteOne({
+        equipmentId: id,
+        userId,
+      });
+      if (result) {
+        return res.send(result);
+      } else {
+        return res.send({ status: false, message: "something went wrong" });
+      }
     } else {
-      return res.send({ status: false, message: "something went wrong" });
+      const result = await favoriteColl.insertOne(payload);
+      if (result) {
+        return res.send(result);
+      } else {
+        return res.send({ status: false, message: "something went wrong" });
+      }
     }
-  } else {
-    const result = await favoriteColl.insertOne(payload);
-    if (result) {
-      return res.send(result);
-    } else {
-      return res.send({ status: false, message: "something went wrong" });
-    }
-  }
-});
+  },
+);
 
 //* get a specific fev document via user session
 app.get(
@@ -887,47 +984,62 @@ app.get(
 );
 
 //* get all favorite document via userId
-app.get("/get-fev-equipments", verifyUser, async (req, res) => {
-  const userId = req.user._id.toString();
-  const favoriteData = await favoriteColl.find({ userId }).toArray();
-  if (favoriteData.length === 0) {
-    return res.send([]);
-  }
+app.get(
+  "/get-fev-equipments",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userId = req.user._id.toString();
+    const favoriteData = await favoriteColl.find({ userId }).toArray();
+    if (favoriteData.length === 0) {
+      return res.send([]);
+    }
 
-  const fevEquipments = await Promise.all(
-    favoriteData.map(async (data) => {
-      return await equipmentsSubmissionColl.findOne({
-        _id: new ObjectId(data.equipmentId),
-      });
-    }),
-  );
-  res.send(fevEquipments);
-});
+    const fevEquipments = await Promise.all(
+      favoriteData.map(async (data) => {
+        return await equipmentsSubmissionColl.findOne({
+          _id: new ObjectId(data.equipmentId),
+        });
+      }),
+    );
+    res.send(fevEquipments);
+  },
+);
 
 //* remove a specific fev item
-app.delete("/delete-fev-item/:id", verifyUser, async (req, res) => {
-  const userId = req.user._id.toString();
-  const equipmentId = req.params.id.toString();
-  const result = await favoriteColl.deleteOne({
-    equipmentId,
-    userId,
-  });
-  if (result) {
-    return res.send(result);
-  } else {
-    return res.send({ status: false, message: "something went wrong" });
-  }
-});
+app.delete(
+  "/delete-fev-item/:id",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userId = req.user._id.toString();
+    const equipmentId = req.params.id.toString();
+    const result = await favoriteColl.deleteOne({
+      equipmentId,
+      userId,
+    });
+    if (result) {
+      return res.send(result);
+    } else {
+      return res.send({ status: false, message: "something went wrong" });
+    }
+  },
+);
 //! payment record (admin)
-app.get("/get-payment-record-as-admin", verifyUser, async (req, res) => {
-  const userRole = req.user.role;
+app.get(
+  "/get-payment-record-as-admin",
+  verifyUser,
+  jsonWebTokenVerify,
+  async (req, res) => {
+    const userRole = req.user.role;
 
-  if (userRole !== "admin") {
-    return res.status(403).send({ message: "Forbidden" });
-  }
-  const allRecord = await paymentRecord.find().toArray();
-  res.send(allRecord);
-});
+    if (userRole !== "admin") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+    const allRecord = await paymentRecord.find().toArray();
+    res.send(allRecord);
+  },
+);
 
 //!get top 5 category and and how much it's have in documents
 app.get("/top-six-category", async (req, res) => {
