@@ -887,13 +887,41 @@ app.delete("/delete-fev-item/:id", verifyUser, async (req, res) => {
 });
 //! payment record (admin)
 app.get("/get-payment-record-as-admin", verifyUser, async (req, res) => {
-  const userRole = req.user.role
-  
+  const userRole = req.user.role;
+
   if (userRole !== "admin") {
     return res.status(403).send({ message: "Forbidden" });
   }
   const allRecord = await paymentRecord.find().toArray();
   res.send(allRecord);
+});
+
+//!get top 5 category and and how much it's have in documents
+app.get("/top-six-category", async (req, res) => {
+  try {
+    const result = await equipmentsSubmissionColl
+      .aggregate([
+        {
+          $group: {
+            _id: "$equipmentCategory",
+            totalEquipment: { $sum: 1 },
+             equipmentImage: { $first: "$equipmentImage" },
+          },
+        },
+        {
+          $sort: {
+            totalEquipment: -1,
+          },
+        },
+        {
+          $limit: 6,
+        },
+      ])
+      .toArray();
+    res.send(result);
+  } catch (error) {
+    res.send({ message: "something is wrong", error: error });
+  }
 });
 
 app.listen(port, () => {
